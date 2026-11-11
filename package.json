@@ -1,0 +1,11 @@
+{
+  "name": "erics-arcade",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Eric's Arcade — browser games hosted on GitHub Pages",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "start": "python -m http.server 4173 --bind 127.0.0.1"
+  }
+}

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#30203d">
+  <meta name="description" content="A word puzzle with a twist. Swap 16 words into four groups with as little in common as possible. Play Anti-Connections at Eric’s Arcade.">
+  <title>Anti-Connections · Eric’s Arcade</title>
+  <link rel="icon" href="../../assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="game.css">
+  <script type="module" src="game.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#game">Skip to the game</a>
+  <header class="site-header">
+    <a class="brand" href="../../index.html" aria-label="Eric’s Arcade, all games"><img class="brand-mark" src="../../assets/favicon.svg" width="32" height="32" alt=""> Eric’s Arcade</a>
+    <a class="back-link" href="../../index.html"><span aria-hidden="true">↖</span> All games</a>
+  </header>
+  <main>
+    <section class="intro" aria-labelledby="game-title">
+      <div>
+        <p class="eyebrow"><span class="edition-dot" aria-hidden="true"></span> WORD PLAY <span class="eyebrow-divider">/</span> BOARD 001</p>
+        <h1 id="game-title">Anti-Connections<span class="title-dot">.</span></h1>
+        <p class="tagline">Find a little less in common.</p>
+      </div>
+      <button id="how-to-play" class="text-button" type="button"><span class="help-icon" aria-hidden="true">?</span> How to play</button>
+    </section>
+
+    <div class="game-layout" id="game">
+      <section class="board-section" aria-label="Word board">
+        <div class="board-heading"><p>Four rows. Four words. <strong>As unrelated as possible.</strong></p><span id="move-count" class="move-count">0 swaps</span></div>
+        <p class="board-instruction" id="board-instruction">Pick a word, then a word in another row to swap them.</p>
+        <div id="board" class="board" aria-describedby="board-instruction"><p class="loading">Getting the words ready…</p></div>
+        <noscript><p class="notice">Enable JavaScript to play this word puzzle.</p></noscript>
+        <div class="board-tools">
+          <div class="tool-group">
+            <button id="undo" class="tool-button" type="button" disabled><span aria-hidden="true">↶</span> Undo</button>
+            <button id="shuffle" class="tool-button" type="button"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 5h2c5 0 5 10 10 10h2m-3-3 3 3-3 3M3 15h2c2 0 3-2 4-4m2-3c1-2 2-3 4-3h2m-3-3 3 3-3 3"/></svg> Shuffle</button>
+          </div>
+          <button id="restart" class="tool-button restart" type="button">Start over</button>
+        </div>
+        <div class="play-actions">
+          <button id="check" class="primary-button" type="button">Check my groups <span aria-hidden="true">↗</span></button>
+          <button id="hint" class="secondary-button" type="button"><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M7 14v-1c0-2-3-3-3-6a6 6 0 0 1 12 0c0 3-3 4-3 6v1M7 15h6M8 18h4"/></svg> A little hint</button>
+        </div>
+        <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true">There’s more than one good answer. Experiment a little.</p>
+      </section>
+
+      <aside class="score-panel" aria-label="Your score">
+        <div class="score-panel-heading"><p class="eyebrow">DISTANCE SCORE</p><span class="score-spark" aria-hidden="true">✳</span></div>
+        <div class="score-value"><span id="score">—</span><span class="score-out-of">/ 100</span></div>
+        <p id="score-caption" class="score-caption">Less in common.<br>More points for you.</p>
+        <div class="score-track" role="progressbar" aria-label="Distance score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="score-fill"></span></div>
+        <div class="score-scale"><span>More related</span><span>More distant</span></div>
+        <div class="score-note"><span class="small-star" aria-hidden="true">✦</span><p>100 is the best arrangement for this board’s scoring model.</p></div>
+        <div class="best-row"><span>Your personal best</span><strong id="best-score">—</strong></div>
+        <button id="share" class="share-button" type="button" disabled><svg aria-hidden="true" viewBox="0 0 20 20"><path d="M7 7V3h10v10h-4M3 7h10v10H3z"/></svg> Share your score</button>
+        <p class="local-note">Your progress stays in this browser.</p>
+      </aside>
+    </div>
+
+    <section class="about-game" aria-label="Game instructions and scoring">
+      <details id="rules">
+        <summary><span>How to play</span><span class="disclosure-mark" aria-hidden="true">+</span></summary>
+        <div class="details-content rules-grid">
+          <div><span class="step-number">01</span><h2>Break the pattern</h2><p>Each row is a group of four. Aim for words that have as little in common as possible.</p></div>
+          <div><span class="step-number">02</span><h2>Mix things up</h2><p>Select two words in different rows to swap them. Use Tab and Enter or Space if you’re playing with a keyboard.</p></div>
+          <div><span class="step-number">03</span><h2>Go a little further</h2><p>Check your groups to see your score and each row’s closest pair. Keep swapping to improve. There’s no timer or mistake limit.</p></div>
+        </div>
+      </details>
+      <details id="method">
+        <summary><span>What makes two words “related”?</span><span class="disclosure-mark" aria-hidden="true">+</span></summary>
+        <div class="details-content method-copy">
+          <p>Words have many meanings, so this game uses one consistent measuring stick: <strong>word embeddings</strong>. A language model represents each word as a vector. Cosine similarity measures how close two vectors are. Smaller similarities mean greater distance in this model.</p>
+          <p>Each row has six word pairs. Its relatedness combines their average similarity with an extra penalty for the closest pair. That means one very related pair can still hold a row back. The board score rewards lower total relatedness across all four rows.</p>
+          <p id="model-details">The similarities are precomputed, so the game runs entirely in your browser without sending your play to an AI service.</p>
+          <p>This is a score challenge, not a single secret solution. The model may miss puns, alternate meanings, or connections that seem obvious to you.</p>
+          <a class="method-link" href="../../DATA.md">Read the scoring and model notes <span aria-hidden="true">↗</span></a>
+        </div>
+      </details>
+    </section>
+    <footer class="game-footer"><span>Made for curious minds.</span><a href="../../index.html">Eric’s Arcade <span aria-hidden="true">↗</span></a></footer>
+  </main>
+
+  <dialog id="share-dialog" aria-labelledby="share-title">
+    <div class="dialog-heading"><h2 id="share-title">A score worth sharing</h2><button id="close-share" class="close-button" type="button" aria-label="Close share dialog">×</button></div>
+    <p id="share-message">Copy the text below and send it to a friend.</p>
+    <label class="sr-only" for="share-text">Your score to share</label>
+    <textarea id="share-text" readonly rows="5"></textarea>
+    <button id="copy-share" class="primary-button" type="button">Copy score</button>
+  </dialog>
+</body>
+</html>
