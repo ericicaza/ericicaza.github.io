@@ -1,6 +1,6 @@
-import { WORDS, BOARD_ID, ANSWER_IDS, RELATED_IDS, PAIR_CONNECTIONS, CONNECTION, MAX_GUESSES, PICK_COUNT } from './data.js?v=2';
+import { WORDS, BOARD_ID, ANSWER_IDS, RELATED_IDS, PAIR_CONNECTIONS, CONNECTION, MAX_GUESSES, PICK_COUNT } from './data.js?v=3';
 
-export { MAX_GUESSES, PICK_COUNT } from './data.js?v=2';
+export { MAX_GUESSES, PICK_COUNT } from './data.js?v=3';
 
 const STATE_VERSION = 2;
 const answerSet = new Set(ANSWER_IDS);

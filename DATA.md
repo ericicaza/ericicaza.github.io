@@ -6,13 +6,20 @@ The round ends with a win when all four selections are correct, including on the
 
 ## Board 001 answer
 
-The four related distractors are **APRICOT, MANGO, PLUM, LEMON**. Their connection is **Fruits**.
+The four linked distractors are **FIRE, LIGHT, HOUSE, WORK**. Every pair has a different conventional word or phrase with a specific meaning:
 
-The four intended outliers are **TUBA, SUBPOENA, NEBULA, SOMERSAULT**: respectively, a musical instrument, a legal term, an astronomical object, and an acrobatic movement. They come from different domains and fall outside the fruit category. This is the board's intended category rule, not a claim that these words have no conceivable shared association.
+- FIRE + LIGHT → **firelight**: the glow from flames.
+- FIRE + HOUSE → **firehouse**: a station for firefighters and fire engines.
+- FIRE + WORK → **firework**: a pyrotechnic device producing light, color, or sound.
+- LIGHT + HOUSE → **lighthouse**: a tower whose light guides or warns ships.
+- LIGHT + WORK → **light work**: an easy task requiring little effort.
+- HOUSE + WORK → **housework**: domestic chores such as cleaning and laundry.
 
-After the round, the pair inspector explains all six possible pairs within the related group. These are curated factual descriptions: all four are tree fruits; apricots, mangoes and plums have hard pits; the notes also mention familiar culinary uses. There is no model-generated association or correctness feedback for individual words during play.
+The four intended outliers are **QUOTIENT, TUBA, HICCUP, PARSNIP**: a mathematical result, a musical instrument, an involuntary bodily action, and a root vegetable. They do not form the intended six-link network. This is a curated puzzle rule, not a claim that these words have no conceivable associations with one another or with the other choices.
 
-The fixed board ID is `four-outliers-v2`. Its display order deliberately mixes distractors and outliers. Restarting replays the same puzzle rather than generating a new answer.
+After the round, the pair inspector explains all six possible pairs within the linked group. The links lead to six distinct meanings; the words are not four members of one topic category. Most links are compound words and one is a phrase, so the game does not claim to demonstrate six different linguistic mechanisms. There is no model-generated association or correctness feedback for individual words during play.
+
+The fixed board ID is `six-links-v3`. Its display order deliberately mixes distractors and outliers. Restarting replays the same puzzle rather than generating a new answer.
 
 ## Implementation
 

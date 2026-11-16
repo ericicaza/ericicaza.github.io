@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { WORDS, BOARD_ID, ANSWER_IDS, RELATED_IDS, PAIR_CONNECTIONS, CONNECTION } from '../games/anti-connections/data.js';
 import { MAX_GUESSES, PICK_COUNT, createGame, evaluateGuess, submitGuess, restoreGame, isRoundOver, getRoundAnswer, explainPair } from '../games/anti-connections/engine.js';
 
-const fruitIds = [0, 2, 5, 7];
+const relatedIds = [0, 2, 5, 7];
 const answer = [1, 3, 4, 6];
 const attempt = (state, ids) => {
   const result = submitGuess(state, ids);
@@ -12,20 +12,20 @@ const attempt = (state, ids) => {
   return result.state;
 };
 
-test('board contains four fruits and the four intended outliers', () => {
+test('board contains four pairwise-linked words and four intended outliers', () => {
   assert.equal(WORDS.length, 8);
   assert.equal(new Set(WORDS).size, 8);
-  assert.equal(CONNECTION, 'Fruits');
-  assert.deepEqual(RELATED_IDS, fruitIds);
-  assert.deepEqual(fruitIds.map((id) => WORDS[id]), ['APRICOT', 'MANGO', 'PLUM', 'LEMON']);
-  assert.deepEqual(ANSWER_IDS.map((id) => WORDS[id]), ['TUBA', 'SUBPOENA', 'NEBULA', 'SOMERSAULT']);
+  assert.equal(CONNECTION, 'Six pairwise links');
+  assert.deepEqual(RELATED_IDS, relatedIds);
+  assert.deepEqual(relatedIds.map((id) => WORDS[id]), ['FIRE', 'LIGHT', 'HOUSE', 'WORK']);
+  assert.deepEqual(ANSWER_IDS.map((id) => WORDS[id]), ['QUOTIENT', 'TUBA', 'HICCUP', 'PARSNIP']);
   assert.equal(MAX_GUESSES, 3);
   assert.equal(PICK_COUNT, 4);
 });
 
 test('feedback counts every possible number correct without exposing per-word flags', () => {
   for (let count = 0; count <= 4; count++) {
-    const selected = [...answer.slice(0, count), ...fruitIds.slice(0, 4 - count)];
+    const selected = [...answer.slice(0, count), ...relatedIds.slice(0, 4 - count)];
     const result = evaluateGuess(selected);
     assert.equal(result.valid, true);
     assert.equal(result.correct, count);
@@ -35,7 +35,7 @@ test('feedback counts every possible number correct without exposing per-word fl
 });
 
 test('third guess can win, and the finished round rejects further attempts', () => {
-  let state = attempt(createGame(), fruitIds);
+  let state = attempt(createGame(), relatedIds);
   state = attempt(state, [0, 1, 2, 3]);
   assert.equal(state.status, 'playing');
   assert.equal(state.remainingGuesses, 1);
@@ -44,7 +44,7 @@ test('third guess can win, and the finished round rejects further attempts', () 
   assert.equal(state.status, 'won');
   assert.equal(state.remainingGuesses, 0);
   assert.equal(isRoundOver(state), true);
-  assert.deepEqual(getRoundAnswer(state), { ids: answer, relatedIds: fruitIds, connection: 'Fruits' });
+  assert.deepEqual(getRoundAnswer(state), { ids: answer, relatedIds, connection: 'Six pairwise links' });
   const locked = submitGuess(state, [0, 1, 2, 4]);
   assert.equal(locked.accepted, false);
   assert.deepEqual(locked.state, state);
@@ -52,7 +52,7 @@ test('third guess can win, and the finished round rejects further attempts', () 
 
 test('three unsuccessful guesses lose and a fourth cannot change the result', () => {
   let state = createGame();
-  for (const ids of [fruitIds, [0, 1, 2, 3], [1, 3, 4, 7]]) state = attempt(state, ids);
+  for (const ids of [relatedIds, [0, 1, 2, 3], [1, 3, 4, 7]]) state = attempt(state, ids);
   assert.deepEqual(state.guesses.map((guess) => guess.correct), [0, 2, 3]);
   assert.equal(state.status, 'lost');
   assert.equal(state.remainingGuesses, 0);
@@ -70,7 +70,7 @@ test('early wins also lock the round and reveal only after completion', () => {
   assert.equal(won.status, 'won');
   assert.equal(won.guesses.length, 1);
   assert.equal(won.remainingGuesses, 2);
-  assert.equal(submitGuess(won, fruitIds).accepted, false);
+  assert.equal(submitGuess(won, relatedIds).accepted, false);
   assert.ok(getRoundAnswer(won));
 });
 
@@ -102,7 +102,7 @@ test('reducers do not mutate caller-owned state or selection arrays', () => {
 });
 
 test('restoration recomputes feedback and status instead of trusting saved fields', () => {
-  let state = attempt(createGame(), fruitIds);
+  let state = attempt(createGame(), relatedIds);
   state = attempt(state, [0, 1, 2, 3]);
   const forged = { ...state, status: 'won', remainingGuesses: 123, guesses: state.guesses.map((guess) => ({ ids: [...guess.ids].reverse(), correct: 4 })) };
   assert.deepEqual(restoreGame(forged), state);
@@ -119,6 +119,7 @@ test('corrupt, duplicate, stale and impossible saved histories reset safely', ()
   const invalidStates = [
     null, undefined, 'not JSON', {},
     { ...initial, boardId: 'first-orbit-v1' },
+    { ...initial, boardId: 'four-outliers-v2' },
     { ...initial, version: 1 },
     { ...initial, guesses: {} },
     { ...initial, guesses: [null] },
@@ -133,10 +134,11 @@ test('corrupt, duplicate, stale and impossible saved histories reset safely', ()
 
 test('all six related-word pairs have order-independent factual explanations', () => {
   assert.equal(PAIR_CONNECTIONS.length, 6);
+  assert.equal(new Set(PAIR_CONNECTIONS.map((pair) => pair.explanation)).size, 6);
   const found = new Set();
-  for (let i = 0; i < fruitIds.length - 1; i++) {
-    for (let j = i + 1; j < fruitIds.length; j++) {
-      const ids = [fruitIds[i], fruitIds[j]];
+  for (let i = 0; i < relatedIds.length - 1; i++) {
+    for (let j = i + 1; j < relatedIds.length; j++) {
+      const ids = [relatedIds[i], relatedIds[j]];
       const explanation = explainPair(ids);
       assert.equal(typeof explanation, 'string');
       assert.ok(explanation.includes(WORDS[ids[0]]) && explanation.includes(WORDS[ids[1]]));
@@ -145,6 +147,16 @@ test('all six related-word pairs have order-independent factual explanations', (
     }
   }
   assert.deepEqual(new Set(PAIR_CONNECTIONS.map((pair) => pair.ids.join(','))), found);
+  const meanings = [
+    [[0, 2], /FIRELIGHT.*glow/],
+    [[0, 5], /FIREHOUSE.*station/],
+    [[0, 7], /FIREWORK.*pyrotechnic/],
+    [[2, 5], /LIGHTHOUSE.*ships/],
+    [[2, 7], /LIGHT WORK.*easy task/],
+    [[5, 7], /HOUSEWORK.*chores/],
+  ];
+  for (const [ids, meaning] of meanings) assert.match(explainPair(ids), meaning);
+  assert.doesNotMatch(PAIR_CONNECTIONS.map((pair) => pair.explanation).join(' '), /fruit|apricot|mango|plum|lemon/i);
 });
 
 test('invalid pairs and pairs including outliers have no explanation', () => {

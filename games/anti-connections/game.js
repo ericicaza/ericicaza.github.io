@@ -1,5 +1,5 @@
-import { WORDS, BOARD_ID, MAX_GUESSES, PICK_COUNT } from './data.js?v=2';
-import { createGame, submitGuess, restoreGame, getRoundAnswer, explainPair } from './engine.js?v=2';
+import { WORDS, BOARD_ID, MAX_GUESSES, PICK_COUNT } from './data.js?v=3';
+import { createGame, submitGuess, restoreGame, getRoundAnswer, explainPair } from './engine.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const storageKey = `erics-arcade:anti-connections:${BOARD_ID}`;
@@ -126,8 +126,8 @@ function renderReveal() {
   if (!answer) { $('related-words').replaceChildren(); $('outsiders').replaceChildren(); return; }
   $('outcome-copy').textContent = state.status === 'won'
     ? `You found all four in ${state.guesses.length} ${state.guesses.length === 1 ? 'guess' : 'guesses'}. Now investigate the four you left behind.`
-    : 'That was your third guess. Here is the answer, plus the four words that share a connection.';
-  const domains = { TUBA: 'Musical instrument', SUBPOENA: 'Legal order', NEBULA: 'Astronomical object', SOMERSAULT: 'Acrobatic movement' };
+    : 'That was your third guess. Here are the outsiders and the six connections between the other four words.';
+  const domains = { QUOTIENT: 'Result of division', TUBA: 'Musical instrument', HICCUP: 'Involuntary diaphragm spasm', PARSNIP: 'Root vegetable' };
   $('outsiders').replaceChildren(...answer.ids.map(id => {
     const row = document.createElement('div');
     row.className = 'outsider-entry';
