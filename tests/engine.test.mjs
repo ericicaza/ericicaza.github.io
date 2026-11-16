@@ -1,75 +1,154 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WORDS, SIMILARITIES } from '../games/anti-connections/data.js';
-import { scoreGroup, scoreArrangement, optimizeBoard, validateArrangement, shuffledGroups, bestSwap } from '../games/anti-connections/engine.js';
+import { WORDS, BOARD_ID, ANSWER_IDS, RELATED_IDS, PAIR_CONNECTIONS, CONNECTION } from '../games/anti-connections/data.js';
+import { MAX_GUESSES, PICK_COUNT, createGame, evaluateGuess, submitGuess, restoreGame, isRoundOver, getRoundAnswer, explainPair } from '../games/anti-connections/engine.js';
 
-const near = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} != ${expected}`);
+const fruitIds = [0, 2, 5, 7];
+const answer = [1, 3, 4, 6];
+const attempt = (state, ids) => {
+  const result = submitGuess(state, ids);
+  assert.equal(result.accepted, true, result.error);
+  assert.equal(result.error, null);
+  return result.state;
+};
 
-test('measured cosine data is complete, symmetric and semantically plausible', () => {
-  assert.equal(WORDS.length, 16);
-  assert.equal(SIMILARITIES.length, 16);
-  for (let i = 0; i < 16; i++) {
-    assert.equal(SIMILARITIES[i].length, 16);
-    near(SIMILARITIES[i][i], 1);
-    for (let j = 0; j < 16; j++) {
-      near(SIMILARITIES[i][j], SIMILARITIES[j][i]);
-      assert.ok(SIMILARITIES[i][j] >= -1 && SIMILARITIES[i][j] <= 1);
+test('board contains four fruits and the four intended outliers', () => {
+  assert.equal(WORDS.length, 8);
+  assert.equal(new Set(WORDS).size, 8);
+  assert.equal(CONNECTION, 'Fruits');
+  assert.deepEqual(RELATED_IDS, fruitIds);
+  assert.deepEqual(fruitIds.map((id) => WORDS[id]), ['APRICOT', 'MANGO', 'PLUM', 'LEMON']);
+  assert.deepEqual(ANSWER_IDS.map((id) => WORDS[id]), ['TUBA', 'SUBPOENA', 'NEBULA', 'SOMERSAULT']);
+  assert.equal(MAX_GUESSES, 3);
+  assert.equal(PICK_COUNT, 4);
+});
+
+test('feedback counts every possible number correct without exposing per-word flags', () => {
+  for (let count = 0; count <= 4; count++) {
+    const selected = [...answer.slice(0, count), ...fruitIds.slice(0, 4 - count)];
+    const result = evaluateGuess(selected);
+    assert.equal(result.valid, true);
+    assert.equal(result.correct, count);
+    assert.deepEqual(Object.keys(result).sort(), ['correct', 'error', 'ids', 'valid']);
+    assert.deepEqual(evaluateGuess([...selected].reverse()), result, 'selection order is irrelevant');
+  }
+});
+
+test('third guess can win, and the finished round rejects further attempts', () => {
+  let state = attempt(createGame(), fruitIds);
+  state = attempt(state, [0, 1, 2, 3]);
+  assert.equal(state.status, 'playing');
+  assert.equal(state.remainingGuesses, 1);
+  assert.equal(getRoundAnswer(state), null);
+  state = attempt(state, answer);
+  assert.equal(state.status, 'won');
+  assert.equal(state.remainingGuesses, 0);
+  assert.equal(isRoundOver(state), true);
+  assert.deepEqual(getRoundAnswer(state), { ids: answer, relatedIds: fruitIds, connection: 'Fruits' });
+  const locked = submitGuess(state, [0, 1, 2, 4]);
+  assert.equal(locked.accepted, false);
+  assert.deepEqual(locked.state, state);
+});
+
+test('three unsuccessful guesses lose and a fourth cannot change the result', () => {
+  let state = createGame();
+  for (const ids of [fruitIds, [0, 1, 2, 3], [1, 3, 4, 7]]) state = attempt(state, ids);
+  assert.deepEqual(state.guesses.map((guess) => guess.correct), [0, 2, 3]);
+  assert.equal(state.status, 'lost');
+  assert.equal(state.remainingGuesses, 0);
+  assert.ok(getRoundAnswer(state));
+  const fourth = submitGuess(state, answer);
+  assert.equal(fourth.accepted, false);
+  assert.deepEqual(fourth.state, state);
+});
+
+test('early wins also lock the round and reveal only after completion', () => {
+  const initial = createGame();
+  assert.equal(getRoundAnswer(initial), null);
+  assert.equal(isRoundOver(initial), false);
+  const won = attempt(initial, answer);
+  assert.equal(won.status, 'won');
+  assert.equal(won.guesses.length, 1);
+  assert.equal(won.remainingGuesses, 2);
+  assert.equal(submitGuess(won, fruitIds).accepted, false);
+  assert.ok(getRoundAnswer(won));
+});
+
+test('invalid selections and repeated sets consume no guesses', () => {
+  const state = attempt(createGame(), [0, 1, 2, 3]);
+  const invalid = [null, '0123', [], [1, 3, 4], [0, 1, 2, 3, 4], [1, 1, 3, 4], [-1, 1, 3, 4], [1, 3, 4, 8], ['1', 3, 4, 6], [1.5, 3, 4, 6], [NaN, 3, 4, 6], [1, 3, 4, ,]];
+  for (const ids of invalid) {
+    const result = submitGuess(state, ids);
+    assert.equal(result.accepted, false);
+    assert.equal(typeof result.error, 'string');
+    assert.deepEqual(result.state, state);
+  }
+  const duplicate = submitGuess(state, [3, 2, 1, 0]);
+  assert.equal(duplicate.accepted, false);
+  assert.match(duplicate.error, /already tried/);
+  assert.deepEqual(duplicate.state, state);
+});
+
+test('reducers do not mutate caller-owned state or selection arrays', () => {
+  const state = createGame();
+  const initial = structuredClone(state);
+  const selected = [6, 4, 3, 1];
+  const result = submitGuess(state, selected);
+  assert.deepEqual(state, initial);
+  assert.deepEqual(selected, [6, 4, 3, 1]);
+  result.state.guesses[0].ids[0] = 99;
+  assert.deepEqual(createGame(), initial);
+  assert.deepEqual(ANSWER_IDS, answer);
+});
+
+test('restoration recomputes feedback and status instead of trusting saved fields', () => {
+  let state = attempt(createGame(), fruitIds);
+  state = attempt(state, [0, 1, 2, 3]);
+  const forged = { ...state, status: 'won', remainingGuesses: 123, guesses: state.guesses.map((guess) => ({ ids: [...guess.ids].reverse(), correct: 4 })) };
+  assert.deepEqual(restoreGame(forged), state);
+  const won = attempt(state, answer);
+  assert.deepEqual(restoreGame({ ...won, status: 'playing', remainingGuesses: 3 }), won);
+  const lost = attempt(state, [1, 3, 4, 7]);
+  assert.deepEqual(restoreGame({ ...lost, status: 'playing', remainingGuesses: 3 }), lost);
+  assert.deepEqual(restoreGame(JSON.parse(JSON.stringify(won))), won);
+});
+
+test('corrupt, duplicate, stale and impossible saved histories reset safely', () => {
+  const initial = createGame();
+  const validGuess = { ids: [0, 1, 2, 3], correct: 2 };
+  const invalidStates = [
+    null, undefined, 'not JSON', {},
+    { ...initial, boardId: 'first-orbit-v1' },
+    { ...initial, version: 1 },
+    { ...initial, guesses: {} },
+    { ...initial, guesses: [null] },
+    { ...initial, guesses: [{ ids: [0, 1, 2, 8] }] },
+    { ...initial, guesses: [validGuess, { ids: [3, 2, 1, 0] }] },
+    { ...initial, guesses: [{ ids: answer }, validGuess] },
+    { ...initial, guesses: [validGuess, validGuess, validGuess, validGuess] },
+  ];
+  for (const saved of invalidStates) assert.deepEqual(restoreGame(saved), initial);
+  assert.equal(initial.boardId, BOARD_ID);
+});
+
+test('all six related-word pairs have order-independent factual explanations', () => {
+  assert.equal(PAIR_CONNECTIONS.length, 6);
+  const found = new Set();
+  for (let i = 0; i < fruitIds.length - 1; i++) {
+    for (let j = i + 1; j < fruitIds.length; j++) {
+      const ids = [fruitIds[i], fruitIds[j]];
+      const explanation = explainPair(ids);
+      assert.equal(typeof explanation, 'string');
+      assert.ok(explanation.includes(WORDS[ids[0]]) && explanation.includes(WORDS[ids[1]]));
+      assert.equal(explainPair([...ids].reverse()), explanation);
+      found.add(ids.join(','));
     }
   }
-  assert.ok(SIMILARITIES[0][8] > SIMILARITIES[0][2], 'apricot/plum should be closer than apricot/subpoena');
+  assert.deepEqual(new Set(PAIR_CONNECTIONS.map((pair) => pair.ids.join(','))), found);
 });
 
-test('group scoring averages all six pairs and penalizes the strongest one', () => {
-  const group = [0, 1, 2, 3];
-  const scores = scoreGroup(group);
-  const values = [SIMILARITIES[0][1], SIMILARITIES[0][2], SIMILARITIES[0][3], SIMILARITIES[1][2], SIMILARITIES[1][3], SIMILARITIES[2][3]];
-  const mean = values.reduce((a, b) => a + b, 0) / 6;
-  near(scores.objective, mean * 0.75 + Math.max(...values) * 0.25);
-  assert.equal(scores.pairs.length, 6);
-  near(scores.strongestPair.similarity, Math.max(...values));
-  near(scoreGroup([...group].reverse()).objective, scores.objective);
-});
-
-test('arrangements reject duplicates, missing entries and invalid indices', () => {
-  const valid = shuffledGroups('validation');
-  assert.equal(validateArrangement(valid), true);
-  for (const invalid of [null, [], valid.slice(0, 3), [[-1, 1, 2, 3], ...valid.slice(1)], valid.map(() => [0, 1, 2, 3])]) {
-    assert.equal(validateArrangement(invalid), false);
-    assert.throws(() => scoreArrangement(invalid), TypeError);
+test('invalid pairs and pairs including outliers have no explanation', () => {
+  for (const ids of [null, [], [0], [0, 2, 5], [0, 0], [0, 1], [1, 3], [0, 8], ['0', 2], [0, 2.5], [0, ,]]) {
+    assert.equal(explainPair(ids), null);
   }
-});
-
-test('exact optimizer calibrates the best to 100 and the worst to 0', () => {
-  const best = optimizeBoard();
-  assert.equal(validateArrangement(best.groups), true);
-  assert.equal(validateArrangement(best.worstGroups), true);
-  near(scoreArrangement(best.groups).score, 100);
-  near(scoreArrangement(best.worstGroups).score, 0);
-  assert.equal(scoreArrangement(best.groups).isOptimal, true);
-  assert.equal(bestSwap(best.groups), null);
-  for (let seed = 0; seed < 100; seed++) {
-    const scored = scoreArrangement(shuffledGroups(seed));
-    assert.ok(scored.objective >= best.objective - 1e-9 && scored.objective <= best.worstObjective + 1e-9);
-  }
-  best.groups[0][0] = 100;
-  assert.equal(validateArrangement(optimizeBoard().groups), true, 'callers cannot corrupt cached optimizer');
-});
-
-test('score is independent of row order and tile order', () => {
-  const groups = shuffledGroups('invariance');
-  near(scoreArrangement(groups).score, scoreArrangement(groups.toReversed().map(group => group.toReversed())).score);
-});
-
-test('seeded shuffles and hints preserve words and leave input unchanged', () => {
-  assert.deepEqual(shuffledGroups('orbit'), shuffledGroups('orbit'));
-  assert.notDeepEqual(shuffledGroups('orbit'), shuffledGroups('orbit2'));
-  const groups = optimizeBoard().worstGroups;
-  const original = structuredClone(groups);
-  const hint = bestSwap(groups);
-  assert.ok(hint && hint.improvement > 0);
-  assert.equal(validateArrangement(hint.groups), true);
-  assert.deepEqual(groups, original);
-  assert.equal(hint.groups[hint.a.group][hint.a.index], hint.b.word);
-  assert.equal(hint.groups[hint.b.group][hint.b.index], hint.a.word);
-  near(scoreArrangement(hint.groups).score, hint.afterScore);
 });

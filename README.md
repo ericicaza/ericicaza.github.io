@@ -4,9 +4,9 @@ A small home for browser games at https://ericicaza.github.io/.
 
 ## Anti-Connections
 
-Arrange sixteen words into four groups of four that are as unrelated as possible. Select two words in different rows to swap them, check your score, and use pair feedback to improve your arrangement. The first board uses the fruit, instrument, legal, and astronomy words from the original game concept.
+Find four outsiders among eight words. Four words share a hidden theme; the other four are the intended outliers. Select four words and submit a guess. Each attempt reports only how many selections are correct, without identifying them. Find all four within three guesses to win. The answers are revealed after a win or after the third unsuccessful guess. After either outcome, select two of the four related words to see an explanation of their connection; all six pairs are available to explore.
 
-Scores use real, precomputed word embeddings. The game runs entirely in the browser without an API key or backend. Progress and personal bests are saved on the player's device. See [DATA.md](DATA.md) for the model, scoring formula, attribution, and reproducibility instructions.
+The first release contains one curated board. Replay starts another round of that same board; this is not a daily puzzle. The game runs entirely in the browser without an API key or backend, and saves the current round on the player's device. See [DATA.md](DATA.md) for the board data and rules.
 
 ## Local development
 

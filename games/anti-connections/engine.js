@@ -1,180 +1,101 @@
-import { WORDS, SIMILARITIES } from './data.js';
+import { WORDS, BOARD_ID, ANSWER_IDS, RELATED_IDS, PAIR_CONNECTIONS, CONNECTION, MAX_GUESSES, PICK_COUNT } from './data.js?v=2';
 
-const SIZE = WORDS.length;
-const FULL_MASK = (1 << SIZE) - 1;
-const EPSILON = 1e-9;
-let cachedOptimization;
+export { MAX_GUESSES, PICK_COUNT } from './data.js?v=2';
 
-function isWord(word) {
-  return Number.isInteger(word) && word >= 0 && word < SIZE;
-}
+const STATE_VERSION = 2;
+const answerSet = new Set(ANSWER_IDS);
+const guessKey = (ids) => ids.join(',');
 
-export function validateArrangement(groups) {
-  if (!Array.isArray(groups) || groups.length !== 4) return false;
-  if (!groups.every(group => Array.isArray(group) && group.length === 4 && group.every(isWord))) return false;
-  return new Set(groups.flat()).size === SIZE;
-}
-
-function assertArrangement(groups) {
-  if (!validateArrangement(groups)) throw new TypeError('Use every word exactly once in four groups of four.');
-}
-
-export function scoreGroup(words) {
-  if (!Array.isArray(words) || words.length !== 4 || !words.every(isWord) || new Set(words).size !== 4) {
-    throw new TypeError('A group must contain four different word indices.');
-  }
-  const pairs = [];
-  for (let i = 0; i < 4; i++) {
-    for (let j = i + 1; j < 4; j++) {
-      pairs.push({ a: words[i], b: words[j], similarity: SIMILARITIES[words[i]][words[j]] });
-    }
-  }
-  pairs.sort((a, b) => b.similarity - a.similarity || a.a - b.a || a.b - b.b);
-  const meanSimilarity = pairs.reduce((sum, pair) => sum + pair.similarity, 0) / 6;
-  const maxSimilarity = pairs[0].similarity;
+export function createGame() {
   return {
-    words: [...words], meanSimilarity, maxSimilarity,
-    objective: 0.75 * meanSimilarity + 0.25 * maxSimilarity,
-    pairs, strongestPair: { ...pairs[0] },
+    version: STATE_VERSION,
+    boardId: BOARD_ID,
+    guesses: [],
+    status: 'playing',
+    remainingGuesses: MAX_GUESSES,
   };
 }
 
-const groupCosts = new Float64Array(FULL_MASK + 1);
-for (let a = 0; a < SIZE - 3; a++) {
-  for (let b = a + 1; b < SIZE - 2; b++) {
-    for (let c = b + 1; c < SIZE - 1; c++) {
-      for (let d = c + 1; d < SIZE; d++) {
-        groupCosts[(1 << a) | (1 << b) | (1 << c) | (1 << d)] = scoreGroup([a, b, c, d]).objective;
-      }
-    }
+// Only the total is returned: there are no per-word correctness flags.
+export function evaluateGuess(ids) {
+  const invalid = (error) => ({ valid: false, ids: null, correct: null, error });
+  if (!Array.isArray(ids) || ids.length !== PICK_COUNT) {
+    return invalid(`Choose exactly ${PICK_COUNT} words before submitting.`);
   }
-}
-
-function wordsForMask(mask) {
-  const words = [];
-  for (let word = 0; word < SIZE; word++) if (mask & (1 << word)) words.push(word);
-  return words;
-}
-
-// Every partition appears exactly once: each next group contains the smallest
-// unused word. Memoizing the remaining mask gives an exact result, not a heuristic.
-function computeOptimization() {
-  const minima = new Float64Array(FULL_MASK + 1).fill(NaN);
-  const maxima = new Float64Array(FULL_MASK + 1).fill(NaN);
-  const minimumChoice = new Uint16Array(FULL_MASK + 1);
-  const maximumChoice = new Uint16Array(FULL_MASK + 1);
-  minima[0] = maxima[0] = 0;
-
-  function solve(mask) {
-    if (!Number.isNaN(minima[mask])) return;
-    const first = mask & -mask;
-    const rest = wordsForMask(mask ^ first);
-    let minimum = Infinity;
-    let maximum = -Infinity;
-    for (let a = 0; a < rest.length - 2; a++) {
-      for (let b = a + 1; b < rest.length - 1; b++) {
-        for (let c = b + 1; c < rest.length; c++) {
-          const group = first | (1 << rest[a]) | (1 << rest[b]) | (1 << rest[c]);
-          const remaining = mask ^ group;
-          solve(remaining);
-          const low = groupCosts[group] + minima[remaining];
-          const high = groupCosts[group] + maxima[remaining];
-          if (low < minimum) { minimum = low; minimumChoice[mask] = group; }
-          if (high > maximum) { maximum = high; maximumChoice[mask] = group; }
-        }
-      }
-    }
-    minima[mask] = minimum;
-    maxima[mask] = maximum;
+  const values = [...ids];
+  if (!values.every((id) => Number.isInteger(id) && id >= 0 && id < WORDS.length)) {
+    return invalid('Choose words from this board.');
   }
-
-  function reconstruct(choice) {
-    let mask = FULL_MASK;
-    const groups = [];
-    while (mask) {
-      const group = choice[mask];
-      groups.push(wordsForMask(group));
-      mask ^= group;
-    }
-    return groups;
+  if (new Set(values).size !== PICK_COUNT) {
+    return invalid(`Choose ${PICK_COUNT} different words.`);
   }
-
-  solve(FULL_MASK);
+  const canonicalIds = values.sort((a, b) => a - b);
   return {
-    groups: reconstruct(minimumChoice), objective: minima[FULL_MASK] / 4, score: 100,
-    worstObjective: maxima[FULL_MASK] / 4, worstGroups: reconstruct(maximumChoice),
+    valid: true,
+    ids: canonicalIds,
+    correct: canonicalIds.filter((id) => answerSet.has(id)).length,
+    error: null,
   };
 }
 
-function optimum() {
-  cachedOptimization ??= computeOptimization();
-  return cachedOptimization;
+function appendGuess(state, evaluation) {
+  const guesses = [...state.guesses, { ids: [...evaluation.ids], correct: evaluation.correct }];
+  const status = evaluation.correct === PICK_COUNT ? 'won'
+    : guesses.length === MAX_GUESSES ? 'lost' : 'playing';
+  return { ...state, guesses, status, remainingGuesses: MAX_GUESSES - guesses.length };
 }
 
-export function optimizeBoard() {
-  const result = optimum();
-  return { ...result, groups: result.groups.map(group => [...group]), worstGroups: result.worstGroups.map(group => [...group]) };
-}
+// Saved feedback, status and attempt counters are never trusted. Replaying only
+// validated unique selections reconstructs all derived state from this board.
+export function restoreGame(saved) {
+  let state = createGame();
+  if (!saved || typeof saved !== 'object' || saved.version !== STATE_VERSION
+    || saved.boardId !== BOARD_ID || !Array.isArray(saved.guesses)
+    || saved.guesses.length > MAX_GUESSES) return state;
 
-function scoreFromObjective(objective) {
-  const { objective: best, worstObjective: worst } = optimum();
-  const span = worst - best;
-  return span < EPSILON ? 100 : Math.max(0, Math.min(100, 100 * (worst - objective) / span));
-}
-
-export function scoreArrangement(groups) {
-  assertArrangement(groups);
-  const groupResults = groups.map(scoreGroup);
-  const objective = groupResults.reduce((sum, group) => sum + group.objective, 0) / 4;
-  const { objective: optimumObjective, worstObjective } = optimum();
-  return {
-    score: scoreFromObjective(objective), objective, groups: groupResults,
-    optimumObjective, worstObjective, gap: Math.max(0, objective - optimumObjective),
-    isOptimal: Math.abs(objective - optimumObjective) < EPSILON,
-  };
-}
-
-export function shuffledGroups(seed = 1) {
-  const text = String(seed);
-  let state = 2166136261;
-  for (let i = 0; i < text.length; i++) state = Math.imul(state ^ text.charCodeAt(i), 16777619);
-  const random = () => {
-    state += 0x6d2b79f5;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-  const words = Array.from({ length: SIZE }, (_, index) => index);
-  for (let i = words.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [words[i], words[j]] = [words[j], words[i]];
+  const seen = new Set();
+  for (const guess of saved.guesses) {
+    if (state.status !== 'playing' || !guess || typeof guess !== 'object') return createGame();
+    const evaluation = evaluateGuess(guess.ids);
+    if (!evaluation.valid) return createGame();
+    const key = guessKey(evaluation.ids);
+    if (seen.has(key)) return createGame();
+    seen.add(key);
+    state = appendGuess(state, evaluation);
   }
-  return Array.from({ length: 4 }, (_, index) => words.slice(index * 4, index * 4 + 4));
+  return state;
 }
 
-export function bestSwap(groups) {
-  assertArrangement(groups);
-  const before = scoreArrangement(groups);
-  let bestObjective = before.objective;
-  let result = null;
-  for (let firstGroup = 0; firstGroup < 3; firstGroup++) {
-    for (let secondGroup = firstGroup + 1; secondGroup < 4; secondGroup++) {
-      for (let firstIndex = 0; firstIndex < 4; firstIndex++) {
-        for (let secondIndex = 0; secondIndex < 4; secondIndex++) {
-          const next = groups.map(group => [...group]);
-          const a = { group: firstGroup, index: firstIndex, word: next[firstGroup][firstIndex] };
-          const b = { group: secondGroup, index: secondIndex, word: next[secondGroup][secondIndex] };
-          [next[firstGroup][firstIndex], next[secondGroup][secondIndex]] = [b.word, a.word];
-          const objective = next.reduce((sum, group) => sum + scoreGroup(group).objective, 0) / 4;
-          if (objective < bestObjective - EPSILON) {
-            bestObjective = objective;
-            const afterScore = scoreFromObjective(objective);
-            result = { a, b, groups: next, beforeScore: before.score, afterScore, improvement: afterScore - before.score, objective };
-          }
-        }
-      }
-    }
+export function submitGuess(currentState, ids) {
+  const state = restoreGame(currentState);
+  const reject = (error) => ({ state, accepted: false, error });
+  if (state.status !== 'playing') return reject('This round is over. Start a new round to play again.');
+
+  const evaluation = evaluateGuess(ids);
+  if (!evaluation.valid) return reject(evaluation.error);
+  const key = guessKey(evaluation.ids);
+  if (state.guesses.some((guess) => guessKey(guess.ids) === key)) {
+    return reject('You already tried those four words. Choose a different combination.');
   }
-  return result;
+  return { state: appendGuess(state, evaluation), accepted: true, error: null };
+}
+
+export function isRoundOver(state) {
+  return restoreGame(state).status !== 'playing';
+}
+
+// Presentation code can use this gate to avoid displaying the answer mid-round.
+export function getRoundAnswer(state) {
+  if (!isRoundOver(state)) return null;
+  return { ids: [...ANSWER_IDS], relatedIds: [...RELATED_IDS], connection: CONNECTION };
+}
+
+// The UI enables this inspector only after the round; unrelated or invalid pairs
+// never receive a made-up explanation.
+export function explainPair(ids) {
+  if (!Array.isArray(ids) || ids.length !== 2) return null;
+  const values = [...ids];
+  if (!values.every((id) => Number.isInteger(id) && RELATED_IDS.includes(id)) || values[0] === values[1]) return null;
+  values.sort((a, b) => a - b);
+  return PAIR_CONNECTIONS.find((pair) => pair.ids[0] === values[0] && pair.ids[1] === values[1])?.explanation ?? null;
 }
